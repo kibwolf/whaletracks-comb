@@ -10,7 +10,7 @@ Created on Thu Jan  9 13:48:49 2020
 #The spectrogram work is done by scipy.signal.spectrogram
 #Check out the man pages and figure out what kind of windows and overlap you'd like for the best looking spectrogram.
 import sys
-sys.path.append('/Users/xuyang/documents/GitHub/whaletracks/whaletracks') 
+sys.path.append('D:/DOCUMENTS/Python/whaletracks-comb/') 
 
 from obspy.clients.fdsn import Client
 from obspy import UTCDateTime
@@ -43,8 +43,13 @@ FILTER_OFFSET = 10
 # Helper functions
 
 def defaultScaleFunction(Sxx):
-    vmin=np.median(10*np.log10(Sxx))+0*np.std(10*np.log10(Sxx)) 
-    vmax=np.median(10*np.log10(Sxx))+2*np.std(10*np.log10(Sxx)) 
+    # vmin=np.median(10*np.log10(Sxx))+0*np.std(10*np.log10(Sxx)) 
+    # vmax=np.median(10*np.log10(Sxx))+2*np.std(10*np.log10(Sxx)) 
+    
+    # Carla 8/25/22 added the following line to calculate Sxx_log in dB re uPa^2/Hz
+    vmin=np.median((10 * abs(np.log10(Sxx))) + 120)+0*np.std((10 * abs(np.log10(Sxx))) + 120) 
+    vmax=np.median((10 * abs(np.log10(Sxx))) + 120)+2*np.std((10 * abs(np.log10(Sxx))) + 120) 
+    
     return vmin, vmax
 
 def defaultKernelLims(f0,f1,bdwdth):
@@ -88,6 +93,7 @@ def plotwav(samp, data, filt_type='bandpass', filt_freqlim=[12, 18],
     """
     #filter data to spectral bands where B-call is
     
+    # output = 'sos' means second order sections
     sos = sig.butter(filt_order, filt_freqlim, 'bp', fs=samp, output = 'sos') 
     filtered_data = sig.sosfiltfilt(sos, data)
 
@@ -96,6 +102,7 @@ def plotwav(samp, data, filt_type='bandpass', filt_freqlim=[12, 18],
 
     
     datalength = data.size
+    # the array of times is in seconds each value separated equally by 1/fs
     times = (np.arange(datalength)/samp) 
 
     [f, t, Sxx] = sig.spectrogram(filtered_data, int(samp), 
@@ -187,7 +194,7 @@ def buildkernel(f0, f1, bdwdth, dur, f, t, samp, plotflag=True,kernel_lims=finKe
 
 
 
-def xcorr(t,f,Sxx,tvec,fvec,BlueKernel,plotflag=True,scale_func=defaultScaleFunction,ylim=[12, 18]):
+def xcorr(t,f,Sxx,tvec,fvec,BlueKernel,startTime,plotflag=True,scale_func=defaultScaleFunction,ylim=[12, 18]):
     """
     Cross-correlate kernel with spectrogram and plot score
     :param np.array f: vector of frequencies returned from plotwav
@@ -207,7 +214,10 @@ def xcorr(t,f,Sxx,tvec,fvec,BlueKernel,plotflag=True,scale_func=defaultScaleFunc
     #Sxx_log1=10*np.log10(Sxx)
     #Sxx_log=Sxx_log1-np.min(Sxx_log1)
 
-    Sxx_log=Sxx
+    strstartTime = startTime.strftime('%m-%d-%Y %H%M')
+    # Sxx_log=Sxx  Carla 8/25/22 commented out this line because it doesn't make sense to use Sxx_log when it's not in log form until plotted
+    # changed line 230 & 262 from Sxx_log to Sxx
+    
 #Cross-correlate kernel with spectrogram
     ind1 = 0
     CorrVal = np.zeros(np.size(t) - (len(tvec)-1)) #preallocate array for correlation values
@@ -222,7 +232,7 @@ def xcorr(t,f,Sxx,tvec,fvec,BlueKernel,plotflag=True,scale_func=defaultScaleFunc
         ind1 += 1
     
     
-    CorrVal_scale=CorrVal*1/(np.median(Sxx_log)*np.size(tvec))
+    CorrVal_scale=CorrVal*1/(np.median(Sxx)*np.size(tvec))
     #CorrVal_scale=CorrVal*1/(np.median(Sxx))
     #CorrVal_scale=CorrVal
     CorrVal_scale[0]=0
@@ -230,7 +240,8 @@ def xcorr(t,f,Sxx,tvec,fvec,BlueKernel,plotflag=True,scale_func=defaultScaleFunc
     neg_ind=CorrVal_scale<0
     CorrVal_scale[neg_ind]=0
     t_scale=t[int(len(tvec)/2)-1:-math.ceil(len(tvec)/2)]
-#Visualize spectrogram and detection scores of of data  
+    
+    #Visualize spectrogram and detection scores of of data  
     #import pdb; pdb.set_trace()
     #find the time of peak in detection scores
     #detect_peaks, _ = find_peaks(CorrVal_scale, distance=300, height=(np.max(CorrVal_scale))*2/3)
@@ -239,7 +250,7 @@ def xcorr(t,f,Sxx,tvec,fvec,BlueKernel,plotflag=True,scale_func=defaultScaleFunc
         
         t1=min(t)
         t2=max(t)
-#plot timeseries on upper axis
+        #plot timeseries on upper axis
         #plt.figure(PLT_SCORE, figsize=(15, 5))
         fig, (ax0, ax1) = plt.subplots(nrows=2,sharex=True, figsize=(15, 4))
         
@@ -248,16 +259,19 @@ def xcorr(t,f,Sxx,tvec,fvec,BlueKernel,plotflag=True,scale_func=defaultScaleFunc
         ax0.set_xlim([t1, t2]) #look at only positive values
         ax0.set_ylim([0, np.max(CorrVal_scale)])
         ax0.set_ylabel('Detection score')
-        ax0.set_title('Spectrogram and detection scores of test data')
+        ax0.set_title('Spectrogram and detection scores of test data ' + strstartTime)
         
 
 #plot spectrogram on lower axis
         cmap = plt.get_cmap('magma')
-        vmin,vmax = scale_func(Sxx_log)
+        vmin,vmax = scale_func(Sxx)
         #vmin, vmax = scale_func(Sxx_log)
         norm = color.Normalize(vmin=vmin, vmax=vmax)
         #plt.subplot(212)
-        im = ax1.pcolormesh(t, f, 10*np.log10(Sxx_log), cmap=cmap,norm=norm) 
+        # Carla 8/25/22 added the following line to calculate Sxx_log in dB re uPa^2/Hz
+        Sxx_log = (10 * abs(np.log10(Sxx))) + 120
+        # im = ax1.pcolormesh(t, f, 10*np.log10(Sxx_log), cmap=cmap,norm=norm) 
+        im = ax1.pcolormesh(t, f, Sxx_log, cmap=cmap,norm=norm)
         #fig.colorbar(im, ax=ax1,orientation='horizontal')
         ax1.set_xlim([t1, t2]) #look at spectrogram segment between given time boundaries
         ax1.set_xlabel('Time (s)', fontsize=20)
@@ -267,14 +281,17 @@ def xcorr(t,f,Sxx,tvec,fvec,BlueKernel,plotflag=True,scale_func=defaultScaleFunc
         #ax1.set_xticks([])
         #ax1.set_xlabel('Time [seconds]')
         fig.tight_layout()
+        fname = ("DetectionScores_Spec_" + strstartTime + ".png")
+        plt.savefig(fname, dpi=600, format='png')
+        plt.show()
         
-    slope_list = []
+    '''slope_list = []    Carla 8/25/22 Moved comment block up from line 289 (for t)
     call_dur = []
     freq_range = []
     #for i in range(12,24):
         #Sxx_call = Sxx_log[i]
         #print(np.max(Sxx_call))
-    '''for t in detect_peaks:
+    for t in detect_peaks:
         t_list = []
         f_list = []
         for i in range(15,25):
@@ -503,8 +520,8 @@ def get_snr(analyzer_j,t,f,Sxx,utcstart_chunk,snr_limits=[14, 16],snr_calllength
     f=f[freq_inds]
 
     med_noise = np.median(Sxx_sub)
-    utc_t = [utcstart_chunk + j for j in t]   
-    snr_t_int=np.int((snr_calllength/2)/(utc_t[1] - utc_t[0]))
+    utc_t = [utcstart_chunk + j for j in t]   # creates a UTCDateTime array based on the t array in seconds and start time
+    snr_t_int=np.int((snr_calllength/2)/(utc_t[1] - utc_t[0])) # snr calllength / dt - what is this value for?
 
     for utc_time in peak_times:
         
@@ -512,15 +529,17 @@ def get_snr(analyzer_j,t,f,Sxx,utcstart_chunk,snr_limits=[14, 16],snr_calllength
         t_peak_ind = utc_t.index(utc_time) 
         Sxx_t_inds1 = list(range(t_peak_ind-snr_t_int,t_peak_ind+snr_t_int))
         #import pdb; pdb.set_trace()
-        Sxx_t_inds = [x for x in Sxx_t_inds1 if x < len(t)]
-        Sxx_t_sub = Sxx_sub[:,Sxx_t_inds]
-        db_max = np.max(Sxx_sub[:,t_peak_ind])
-        max_loc = np.where(Sxx_sub[:,t_peak_ind] == db_max)
+        Sxx_t_inds = [x for x in Sxx_t_inds1 if x < len(t)] # this seems to do the same thing as line 519
+        Sxx_t_sub = Sxx_sub[:,Sxx_t_inds] # psd subset 10 indices around that peak time
+        db_max = np.max(Sxx_sub[:,t_peak_ind]) # get the max value for that peak time - this is NOT a dB value
+        max_loc = np.where(Sxx_sub[:,t_peak_ind] == db_max) # get the location in Sxx_sub where db_max is
         freq_max=f[max_loc]
         f_inds = np.where(np.logical_and(f>=freq_max-snr_freqwidth/2, f<=freq_max+snr_freqwidth/2))
-        Sxx_tf_sub = Sxx_t_sub[f_inds,:]
-        call_noise = np.median(Sxx_tf_sub)
-        snr = snr + [10*np.log10(call_noise/med_noise)]
+        Sxx_tf_sub = Sxx_t_sub[f_inds,:] # further reduce spec to only freqs around peak
+        call_noise = np.median(Sxx_tf_sub) # the median of that subset spec is the call noise
+        #snr = snr + [10*np.log10(call_noise/med_noise)] # snr is call noise / median noise found in the original spec subset in line 511
+        # Carla 8/25/22 added the following line to calculate snr in dB re uPa^2/Hz
+        snr = snr + [(10*abs(np.log10(call_noise/med_noise)))+120] # snr is call noise / median noise found in the original spec subset in line 511
 
     #Get SNR of 5 seconds of noise preceding call
     start_times=analyzer_j.df['start_time'].to_list()
@@ -534,7 +553,9 @@ def get_snr(analyzer_j,t,f,Sxx,utcstart_chunk,snr_limits=[14, 16],snr_calllength
         Sxx_t_inds = [x for x in Sxx_t_inds1 if x >= 0]
         Sxx_t_sub = Sxx_sub[:,Sxx_t_inds]
         ambient_noise = np.median(Sxx_t_sub)
-        start_snr = start_snr + [10*np.log10(ambient_noise/med_noise)]
+        # start_snr = start_snr + [10*np.log10(ambient_noise/med_noise)]
+        # Carla 8/25/22 added the following line to calculate start_snr in dB re uPa^2/Hz
+        start_snr = start_snr + [(10*abs(np.log10(ambient_noise/med_noise)))+120]
 
     #Get SNR of 3 seconds after call
     #end_times=analyzer_j.df['end_time'].to_list()
@@ -864,11 +885,11 @@ def get_amps_max(t,env,utcstart_chunk,analyzer_j,dt_up,dt_down):
     #utcstart_chunk: start utctime of data
     #analyzer_j: analyzer_j class object
     #dt_up: seconds before detection you want to search for peak
-    #dt_up: seconds after detection you want to search for peak
+    #dt_down: seconds after detection you want to search for peak  CARLA 9/6/22 changed from dt_up to dt_down
 
-    dettimes=analyzer_j.df.peak_time-utcstart_chunk
-    samp_down=math.ceil(dt_down/(t[1]-t[0]))
-    samp_up=math.ceil(dt_up/(t[1]-t[0]))
+    dettimes=analyzer_j.df.peak_time-utcstart_chunk # times in seconds from the peak time - start chunk time
+    samp_down=math.ceil(dt_down/(t[1]-t[0])) # num samples after peak detection
+    samp_up=math.ceil(dt_up/(t[1]-t[0])) # num samples before peak detection
     ones_pad=np.ones((1,2000))*np.median(env)
     
     env_pad=np.concatenate((ones_pad[0],env,ones_pad[0]))
@@ -879,14 +900,17 @@ def get_amps_max(t,env,utcstart_chunk,analyzer_j,dt_up,dt_down):
         
         env_chunk=np.zeros((1,samp_down+samp_up))
         #import pdb; pdb.set_trace()
-        timeind1=(np.abs(t - det)).argmin()
-        timeind=timeind1+2000
+        timeind1=(np.abs(t - det)).argmin() # argmin() method returns indices of the min element of the array in a particular axis.
+        timeind=timeind1+2000  # what's magic about 2000?
         startind=timeind-samp_up
         endind=timeind+samp_down
 
         env_chunk = env_pad[startind:endind] #grab spectrogram subset for multiplication
 
-        maxamp += [10*np.log10(max(env_chunk))]
+        # maxamp += [10*np.log10(max(env_chunk))]
+        
+        # Carla 8/25/22 added the following line to calculate maxamp in dB re uPa^2/Hz
+        maxamp += [(10*abs(np.log10(max(env_chunk))))+120]
     
     
     return maxamp    
@@ -894,16 +918,16 @@ def get_amps_max(t,env,utcstart_chunk,analyzer_j,dt_up,dt_down):
 def get_amps_med(t,timeseries,utcstart_chunk,analyzer_j,dt_up,dt_down):
     #Variables
     #t: timeseries in seconds
-    #env: envelope of timeseries (should work on raw timeseries too)
+    #timeseries: envelope of timeseries (should work on raw timeseries too)
     #utcstart_chunk: start utctime of data
     #analyzer_j: analyzer_j class object
     #dt_up: seconds before detection you want to search for peak
-    #dt_up: seconds after detection you want to search for peak
+    #dt_down: seconds after detection you want to search for peak  CARLA 9/6/22 changed from dt_up to dt_down
 
-    dettimes=analyzer_j.df.peak_time-utcstart_chunk
-    samp_down=math.ceil(dt_down/(t[1]-t[0]))
-    samp_up=math.ceil(dt_up/(t[1]-t[0]))
-    ones_pad=np.ones((1,2000))*np.median(np.abs(timeseries))
+    dettimes=analyzer_j.df.peak_time-utcstart_chunk # times in seconds from the peak time - start chunk time
+    samp_down=math.ceil(dt_down/(t[1]-t[0])) # num samples after peak detection
+    samp_up=math.ceil(dt_up/(t[1]-t[0])) # num samples before peak detection
+    ones_pad=np.ones((1,2000))*np.median(np.abs(timeseries)) # what's magic about 2000?
     
     series_pad=np.concatenate((ones_pad[0],timeseries,ones_pad[0]))
     
@@ -920,7 +944,10 @@ def get_amps_med(t,timeseries,utcstart_chunk,analyzer_j,dt_up,dt_down):
 
         series_chunk = series_pad[startind:endind] #grab spectrogram subset for multiplication
 
-        medamp += [10*np.log10(np.median(np.abs(series_chunk)))]
+        # medamp += [10*np.log10(np.median(np.abs(series_chunk)))]
+        
+        # Carla 8/25/22 added the following line to calculate medamp in dB re uPa^2/Hz
+        medamp += [(10*abs(np.log10(np.median(np.abs(series_chunk)))))+120]
     
     
     return medamp  

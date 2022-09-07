@@ -11,7 +11,8 @@ stores detection metrics in comma-separated variable files.
 
 import sys
 
-sys.path.append('/Users/wader/Documents/GitHub/whaletracks/') 
+sys.path.append('D:/DOCUMENTS/Python/whaletracks-comb/')
+# sys.path.append('C:/Users/kibwo/Documents/Python/whaletracks-comb/') 
 
 from obspy.clients.fdsn import Client
 from obspy import UTCDateTime
@@ -39,9 +40,9 @@ PLOTFLAG = True  #Use if troubleshooting and want to see plots.
 MP_FLAG = False #Use if storing Fin multipath info
 CLIENT_CODE = 'IRIS'
 network="OO" #Network name "OO" for OOI, "7D" for Cascadia, "XF" for marianas
-station= "HYSB1" # "B19" for marianas station #Specific station, or '*' for all available stations
+station= "AXBA1" # "B19" for marianas station #Specific station, or '*' for all available stations
 location='*'  # '*' for all available locations
-channel= 'HHZ' #Choose channels,  you'll want 'BHZ,HHZ' for Cascadia
+channel= 'HDH' #Choose channels,  you'll want 'BHZ,HHZ' for Cascadia
                       #Check http://ds.iris.edu/mda/OO/ for OOI station channels
 
 #DET_PATH=cn.SCM_DETECTION.csv_path
@@ -77,8 +78,8 @@ if FINFLAG:
 #STARTTIME = ("2015-09-01T01:30:00.000") # for testing_xuyang
 #ENDTIME =   ("2015-09-01T02:10:00.000")
 
-STARTTIME = ("2019-10-15T07:00:00.000") # for testing_xuyang @axab1
-ENDTIME =   ("2019-10-15T07:20:00.000")
+STARTTIME = ("2016-01-15T00:00:00.000") # for testing_xuyang @axab1
+ENDTIME =   ("2016-01-16T00:00:00.000")
 
 #STARTTIME = ("2012-02-02T00:00:00.000") #for marianas fins
 #ENDTIME = ("2013-02-06T00:00:00.000")
@@ -92,8 +93,8 @@ ENDTIME =   ("2019-10-15T07:20:00.000")
 #STARTTIME = ("2018-10-25T13:07:00.000") #for testing on FN14A fins
 #ENDTIME = ("2018-10-25T13:37:00.000")
 
-HALF_HOUR = 1800  # in seconds
-CHUNK_LENGTH=HALF_HOUR/3 #secnods
+HALF_HOUR = 3600  # in seconds
+CHUNK_LENGTH=HALF_HOUR/3 # seconds for chunk, this is 10 minutes in seconds (600)
 
 #starttime=("2011-10-01T12:00:00.000")
 #endtime=("2012-07-01T12:00:00.000")
@@ -134,6 +135,7 @@ def main(STARTTIME, ENDTIME,
         #Attempt to get waveforms
         while st_raw_exist == False and retry < 5:
             try:
+                # get_waveforms returns a Stream object
                 st_raw=client.get_waveforms(network=network, station=station_ids, location=location,
                                             channel=channel, starttime=utcstart_chunk,
                                             endtime=utcend_chunk, attach_response=True)
@@ -148,9 +150,11 @@ def main(STARTTIME, ENDTIME,
         if st_raw_exist == False:
             print("WARNING: no data available from input station/times")
             #write to a csv file
-            N_event=pd.read_csv(NEVENT_PATH)
-            N_event.loc[len(N_event.index)] = [(utcstart_chunk),(station_ids)]
-            N_event.to_csv(NEVENT_PATH, index=False)
+            # Carla note 7/27/22: throws error is NEVENT_PATH doesn't already exist in the directory
+            # commenting out for now. Rose's code only runs the two lines afterwards
+            # N_event=pd.read_csv(NEVENT_PATH)
+            # N_event.loc[len(N_event.index)] = [(utcstart_chunk),(station_ids)]
+            # N_event.to_csv(NEVENT_PATH, index=False)
             
             utcstart_chunk=utcstart_chunk+CHUNK_LENGTH
             utcend_chunk=utcend_chunk+CHUNK_LENGTH
@@ -170,9 +174,11 @@ def main(STARTTIME, ENDTIME,
                
         
 
-        num_sta=len(st_raw)
-        analyzers_chunk=[]
-        #Run detector on each station
+        
+        num_sta=len(st_raw) # Carla note 7/26/22: number of traces in the data stream
+        analyzers_chunk=[]  # initiate chunk dataframe
+        
+        #Run detector on each trace
         for idx in range(1, num_sta+1):
     
             j = idx - 1
@@ -181,7 +187,7 @@ def main(STARTTIME, ENDTIME,
     
             tr_filt=tr.copy()
             
-            if len(tr_filt.data) < tr_filt.stats.sampling_rate*60*5: #skip if less than 1 min of data
+            if len(tr_filt.data) < tr_filt.stats.sampling_rate*60*1: #skip if less than 1 min of data
                 continue
             if tr_filt.data[0]==tr_filt.data[1]: #skip if data is bad (indicated by constant data)
                 continue
@@ -195,16 +201,16 @@ def main(STARTTIME, ENDTIME,
                 window_size=1
             
                 overlap=.95
-                freqlim=[3, 37]
+                freqlim=[3, 37] # Hz
                 #SNR metrics
-                snr_limits=[15, 25]
-                snr_calllength=1
-                snr_freqwidth=5
+                snr_limits=[15, 25] # Hz
+                snr_calllength=1 # Hz
+                snr_freqwidth=5 # Hz
                 #Event metrics
-                prominence=1000 #min threshold
-                event_dur= .1 #minimum width of detection
-                distance=15 #minimum distance between detections
-                rel_height=.8
+                prominence=1000 #min threshold - dimensionless xcorr output
+                event_dur= .1 #minimum width of detection - sec, calculated above and below threshold
+                distance=15 #minimum distance between detections - sec
+                rel_height=.8 # units, 80% of the peak is above 
 
 
 
@@ -227,6 +233,7 @@ def main(STARTTIME, ENDTIME,
             #Make spectrogram
             [f,t,Sxx]=detect.plotwav(tr_filt.stats.sampling_rate, tr_filt.data, window_size=window_size, overlap=overlap, plotflag=PLOTFLAG,filt_freqlim=freqlim,ylim=freqlim)
             #import pdb; pdb.set_trace()
+            
             #Make detection kernel
             [tvec, fvec, BlueKernel, freq_inds]=detect.buildkernel(f0, f1, bdwdth, dur, f, t, tr_filt.stats.sampling_rate, plotflag=PLOTFLAG, kernel_lims=detect.defaultKernelLims)
             
@@ -235,7 +242,7 @@ def main(STARTTIME, ENDTIME,
             f_sub=f[freq_inds]
             
             #Run detection using built kernel and spectrogram
-            [times, values]=detect.xcorr(t,f_sub,Sxx_sub,tvec,fvec,BlueKernel, plotflag=PLOTFLAG,ylim=freqlim)
+            [times, values]=detect.xcorr(t,f_sub,Sxx_sub,tvec,fvec,BlueKernel, utcstart_chunk.datetime, plotflag=PLOTFLAG,ylim=freqlim)
             
            #Pick detections using EventAnalyzer class
             analyzer_j = EventAnalyzer(times, values, utcstart_chunk, dur=event_dur, prominence=prominence, distance=distance, rel_height=rel_height)
@@ -294,28 +301,37 @@ def main(STARTTIME, ENDTIME,
                 amplitude_envelope = abs(hilbert(filtered_data)) #take hilbert envelope of timeseries
                 seconds=np.array([s/tr_filt.stats.sampling_rate for s in samples]) #calculate seconds
 
-                maxamps=detect.get_amps_max(seconds,amplitude_envelope,utcstart_chunk,analyzer_j,1,2) #get amplitudes in array
+                maxamps=detect.get_amps_max(seconds,amplitude_envelope,utcstart_chunk,analyzer_j,1,2) #get peak amplitudes in array searching 1 sec before & 2 secs after start
                 analyzer_j.df['peak_amp']=maxamps
 
+                # Carla 9/6/22 I have no idea the value of these next two lines
                 medamps=np.median(np.abs(filtered_data))
-                analyzer_j.df['med_amp']=[medamps]*len(maxamps)
+                analyzer_j.df['med_amp']=[medamps]*len(maxamps) # this just takes the single value medamps and makes it into an array so it can be put into the dataframe
             
-                medamps_prec=detect.get_amps_med(seconds,filtered_data,utcstart_chunk,analyzer_j,5,-2) #get amplitudes in array
+                medamps_prec=detect.get_amps_med(seconds,filtered_data,utcstart_chunk,analyzer_j,5,-2) #get median amplitudes in array searching 5 sec before & -2 seconds after start
                 analyzer_j.df['preceding_amp']=medamps
+                
+                # Carla 8/24/22 Added line to include actual median amplitudes in the csv file, these turn out to be higher than the peak amplitudes!
+                analyzer_j.df['med_amp']=medamps_prec
 
                 
             
 
             analyzers_chunk.append(analyzer_j.df)   
+            
+        # end for loop Carla note 7/27/22
                       
         utcstart_chunk=utcstart_chunk+CHUNK_LENGTH
         utcend_chunk=utcend_chunk+CHUNK_LENGTH
         
+    # end while utcend > utcstart_chunk loop Carla note 7/27/22
+        
+        
         #Extend final dataframe with detections from current time chunk
         analyzers.extend(analyzers_chunk)
         new_df = pd.concat(analyzers)
-        new_df.to_csv(chunk_pth, index=False)
-        
+        new_df.to_csv(chunk_pth, index=False)       
+    
 
     
     if len(analyzers) == 0:
