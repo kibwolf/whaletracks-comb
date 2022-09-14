@@ -78,8 +78,8 @@ if FINFLAG:
 #STARTTIME = ("2015-09-01T01:30:00.000") # for testing_xuyang
 #ENDTIME =   ("2015-09-01T02:10:00.000")
 
-STARTTIME = ("2016-01-15T00:00:00.000") # for testing_xuyang @axab1
-ENDTIME =   ("2016-01-16T00:00:00.000")
+STARTTIME = ("2016-01-08T20:00:00.000") # for testing_xuyang @axab1
+ENDTIME =   ("2016-01-08T21:00:00.000")
 
 #STARTTIME = ("2012-02-02T00:00:00.000") #for marianas fins
 #ENDTIME = ("2013-02-06T00:00:00.000")
@@ -175,7 +175,7 @@ def main(STARTTIME, ENDTIME,
         
 
         
-        num_sta=len(st_raw) # Carla note 7/26/22: number of traces in the data stream
+        num_sta=len(st_raw) # Carla note 7/26/22: number of traces in the data stream. For OBSs, it is referred to as stations
         analyzers_chunk=[]  # initiate chunk dataframe
         
         #Run detector on each trace
@@ -207,7 +207,7 @@ def main(STARTTIME, ENDTIME,
                 snr_calllength=1 # Hz
                 snr_freqwidth=5 # Hz
                 #Event metrics
-                prominence=1000 #min threshold - dimensionless xcorr output
+                prominence=200 #min threshold - dimensionless xcorr output
                 event_dur= .1 #minimum width of detection - sec, calculated above and below threshold
                 distance=15 #minimum distance between detections - sec
                 rel_height=.8 # units, 80% of the peak is above 
